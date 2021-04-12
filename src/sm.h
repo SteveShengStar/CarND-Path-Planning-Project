@@ -101,14 +101,17 @@ class StateMachine {
                                                 LateralState::CHANGE_LANE_LEFT,
                                                 this->current_state->future_lane,
                                                 this->current_state->future_lane));
-                } else if (anticipLateralState == LateralState::STAY_IN_LANE) {
+                }
+                 else if (anticipLateralState == LateralState::STAY_IN_LANE) {
                     if (anticipLongState == LongitudinalState::MAINTAIN_COURSE) {
+
                         future_states.push_back(State(LongitudinalState::MAINTAIN_COURSE,
                                                 LateralState::STAY_IN_LANE,
                                                 this->current_state->current_lane,
                                                 this->current_state->current_lane));
                     } 
                     else if (anticipLongState == LongitudinalState::DECELERATE) {
+                        
                         future_states.push_back(State(LongitudinalState::DECELERATE,
                                                 LateralState::STAY_IN_LANE,
                                                 this->current_state->current_lane,
