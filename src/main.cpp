@@ -24,8 +24,15 @@ int main() {
   vector<double> map_waypoints_dx;
   vector<double> map_waypoints_dy;
 
-  // Start in lane 1, which is the center lane (0 is left and 2 is right)
-  int lane = 1;
+  const int startLane = 1;
+  const int nextLane = 1;
+  const int SCAN_RANGE = 30;
+  int count = 0;
+  StateMachine sm(LongitudinalState::MAINTAIN_COURSE, 
+                  LateralState::STAY_IN_LANE, 
+                  startLane,    // Start in lane 1, which is the center lane (0 is left and 2 is right)
+                  nextLane);   
+
   // Start at zero velocity and gradually accelerate
   double ref_vel = 0.0; // mph
 
@@ -55,6 +62,8 @@ int main() {
     map_waypoints_dx.push_back(d_x);
     map_waypoints_dy.push_back(d_y);
   }
+
+  int lane = sm.current_state->current_lane;
 
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
                &map_waypoints_dx,&map_waypoints_dy,&ref_vel,&lane]
@@ -93,7 +102,6 @@ int main() {
           // Sensor Fusion Data, a list of all other cars on the same side 
           //   of the road.
           auto sensor_fusion = j[1]["sensor_fusion"];
-
           json msgJson;
 
           /**
@@ -108,12 +116,13 @@ int main() {
           }
         
           bool too_close = false; // True if too close to a car in front
-        
+          sm.current_state = State::STAY_IN_LANE;
+
           // Find ref_v to use
           for (int i = 0; i < sensor_fusion.size(); i++) {
             // Check if the car is in the same lane as the ego vehicle
             float d = sensor_fusion[i][6];
-            if (d < (2+4*lane+2) && d > (2+4*lane-2)){ // + - 2 because the lane is 4 meters wide
+            if (d < (2+4*lane+2) && d > (2+4*lane-2)) { // + - 2 because the lane is 4 meters wide
               double vx = sensor_fusion[i][3];
               double vy = sensor_fusion[i][4];
               double check_speed = sqrt(vx*vx + vy*vy);
@@ -121,10 +130,24 @@ int main() {
               
               // Calculate the check_car's future location
               check_car_s += (double)prev_size * 0.02 * check_speed;
+
               // If the check_car is within 30 meters in front, reduce ref_vel so that we don't hit it
-              if (check_car_s > car_s && (check_car_s - car_s) < 30){
-                //ref_vel = 29.5;
-                too_close = true;
+              if (check_car_s > car_s && (check_car_s - car_s) < 30) {
+                if (lane == 0) {
+                    // If I am on the left-most lane, I need to check whether the car on the right is too close to me
+                    sm.current_state = State::PREPARE_CHANGE_LANE_RIGHT;
+                } else if (lane == 1) {
+                    if (count % 2 == 0) {
+                        sm.current_state = State::PREPARE_CHANGE_LANE_RIGHT;
+                    } else {
+                        sm.current_state = State::PREPARE_CHANGE_LANE_LEFT;
+                    }
+                    count++;
+                } else if (lane == 2) {
+                    // If I am on the right-most lane, I need to check whether the car on the left is too close to me
+                    sm.current_state = State::PREPARE_CHANGE_LANE_LEFT;
+                }
+                break;
               } 
             }
           }
@@ -164,12 +187,88 @@ int main() {
           }
         
           // Add evenly 30m spaced points ahead of the starting reference
-          vector<double> next_wp0 = getXY(car_s+30, 2+4*lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          vector<double> next_wp1 = getXY(car_s+60, 2+4*lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          vector<double> next_wp2 = getXY(car_s+90, 2+4*lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          vector<double> next_wp0 = getXY(car_s+30, 2+4*sm.current_state, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+
+          if (sm.current_state == State::PREPARE_CHANGE_LANE_RIGHT) {
+            for (int i = 0; i < sensor_fusion.size(); i++) {
+
+                // Check if this "other" car is on the right of the current ego vehicle.
+                if (d < (2+4*(lane+1)+2) && d > (2+4*(lane+1)-2)) {
+
+                  float  d  = sensor_fusion[i][6];
+                  double vx = sensor_fusion[i][3];
+                  double vy = sensor_fusion[i][4];
+                  double check_speed = sqrt(vx*vx + vy*vy);
+                  double check_car_s = sensor_fusion[i][5];
+                
+                  check_car_s += (double)prev_size * 0.02 * check_speed;
+
+                  // Check if the lane-switch is safe
+                  if (abs(check_car_s - car_s) < SCAN_RANGE) {  // we detected that a car is too close
+                    sm.anticipLateralState = LateralState::STAY_IN_LANE;
+
+                    if (check_speed > ref_vel) {  // It is safe to proceed at the same speed
+                      sm.anticipLongState = LongitudinalState::MAINTAIN_COURSE;
+                    } else {                      // Not safe to proceed at same speed
+                      sm.anticipLongState = LongitudinalState::DECELERATE;
+                    }
+                    break;
+                  } 
+                }
+            }
+
+            sm.anticipLateralState = LateralState::CHANGE_LANE_RIGHT;
+
+          } else if (sm.current_state == State::PREPARE_CHANGE_LANE_LEFT) {
+              for (int i = 0; i < sensor_fusion.size(); i++) {
+
+                // Check if this "other" car is on the left of the current ego vehicle.
+                if (d < (2+4*(lane-1)+2) && d > (2+4*(lane-1)-2)) {
+
+                  float  d  = sensor_fusion[i][6];
+                  double vx = sensor_fusion[i][3];
+                  double vy = sensor_fusion[i][4];
+                  double check_speed = sqrt(vx*vx + vy*vy);
+                  double check_car_s = sensor_fusion[i][5];
+                
+                  check_car_s += (double)prev_size * 0.02 * check_speed;
+
+                  // Check if the lane-switch is safe
+                  if (abs(check_car_s - car_s) < SCAN_RANGE) {  // we detected that a car is too close
+                    sm.anticipLateralState = LateralState::STAY_IN_LANE;
+
+                    if (check_speed > ref_vel) {  // It is safe to proceed at the same speed
+                      sm.anticipLongState = LongitudinalState::MAINTAIN_COURSE;
+                    } else {                      // Not safe to proceed at same speed
+                      sm.anticipLongState = LongitudinalState::DECELERATE;
+                    }
+                    break;
+                  } 
+                }
+              }
+
+              sm.anticipLateralState = LateralState::CHANGE_LANE_LEFT;
+          } else {
+              for (int i = 0; i < sensor_fusion.size(); i++) {
+
+              }
+
+              sm.anticipLateralState = LateralState::CHANGE_LANE_LEFT;
+          }
+
+
+          vector<State> nextPossibleStates = state.nextPossibleStates();
+          
+
+
+          vector<double> next_wp1 = getXY(car_s+60, 2+4*sm.current_state, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          vector<double> next_wp2 = getXY(car_s+90, 2+4*sm.current_state, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          
+          
           ptsx.push_back(next_wp0[0]);
           ptsx.push_back(next_wp1[0]);
           ptsx.push_back(next_wp2[0]);
+          sm.current_state(count, count, count);
           ptsy.push_back(next_wp0[1]);
           ptsy.push_back(next_wp1[1]);
           ptsy.push_back(next_wp2[1]);
