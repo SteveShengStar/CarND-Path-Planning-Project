@@ -23,126 +23,61 @@ class State {
         LongitudinalState long_state;       
         LateralState lat_state;  
         int current_lane;
-        int future_lane;
 
-        State(LongitudinalState long_state, LateralState lat_state, int current_lane, int future_lane) {
+        State(LongitudinalState long_state, LateralState lat_state, int current_lane, int next_lane) {
             this->long_state = long_state;
             this->lat_state = lat_state;
             this->current_lane = current_lane;
-            this->future_lane = future_lane;
         }
 };
 
 
 class StateMachine {
     public:
-        State* current_state;
+        State current_state;
 
         StateMachine() {
-            current_state = new State(LongitudinalState::MAINTAIN_COURSE, LateralState::STAY_IN_LANE, 1, 1);
+            current_state = State(LongitudinalState::MAINTAIN_COURSE, LateralState::STAY_IN_LANE, 1);
         }
 
-        StateMachine(LongitudinalState long_state, LateralState lat_state, int current_lane, int future_lane) {
-            current_state = new State(long_state, lat_state, current_lane, future_lane);
+        StateMachine(LongitudinalState long_state, LateralState lat_state, int current_lane) {
+            current_state = State(long_state, lat_state, current_lane);
         }
 
-        vector<State> nextPossibleStates() {
-            vector<State> future_states;
-            LateralState anticipLateralState;
-            LongitudinalState anticipLongState;
-            
-            switch (this->current_state->lat_state)
+        State updateLateralState(LateralState new_lateral_state) {
+            // LongitudinalState long_state;       
+            // LateralState lat_state;  
+            // int current_lane;
+
+            current_state.lat_state = new_lateral_state;
+
+            switch (current_state)
             {
-            case LateralState::STAY_IN_LANE:
-                future_states.push_back(State(LongitudinalState::MAINTAIN_COURSE,
-                                            LateralState::STAY_IN_LANE,
-                                            this->current_state->current_lane,
-                                            this->current_state->current_lane));
-                future_states.push_back(State(LongitudinalState::ACCELERATE,
-                                            LateralState::STAY_IN_LANE,
-                                            this->current_state->current_lane,
-                                            this->current_state->current_lane));
-                future_states.push_back(State(LongitudinalState::DECELERATE,
-                                            LateralState::STAY_IN_LANE,
-                                            this->current_state->current_lane,
-                                            this->current_state->current_lane));        
-
-                future_states.push_back(State(LongitudinalState::MAINTAIN_COURSE,
-                                            LateralState::PREPARE_CHANGE_LANE_LEFT,
-                                            this->current_state->current_lane,
-                                            this->current_state->current_lane - 1));
-                future_states.push_back(State(LongitudinalState::ACCELERATE,
-                                            LateralState::PREPARE_CHANGE_LANE_LEFT,
-                                            this->current_state->current_lane,
-                                            this->current_state->current_lane - 1));
-                future_states.push_back(State(LongitudinalState::DECELERATE,
-                                            LateralState::PREPARE_CHANGE_LANE_LEFT,
-                                            this->current_state->current_lane,
-                                            this->current_state->current_lane - 1));
-
-                future_states.push_back(State(LongitudinalState::MAINTAIN_COURSE,
-                                            LateralState::PREPARE_CHANGE_LANE_RIGHT,
-                                            this->current_state->current_lane,
-                                            this->current_state->current_lane + 1));
-                future_states.push_back(State(LongitudinalState::ACCELERATE,
-                                            LateralState::PREPARE_CHANGE_LANE_RIGHT,
-                                            this->current_state->current_lane,
-                                            this->current_state->current_lane + 1));
-                future_states.push_back(State(LongitudinalState::DECELERATE,
-                                            LateralState::PREPARE_CHANGE_LANE_RIGHT,
-                                            this->current_state->current_lane,
-                                            this->current_state->current_lane + 1));
-
-                break;
-            case LateralState::PREPARE_CHANGE_LANE_LEFT:
-
-                if (anticipLateralState == LateralState::CHANGE_LANE_LEFT) {
-                    future_states.push_back(State(LongitudinalState::MAINTAIN_COURSE,
-                                                LateralState::CHANGE_LANE_LEFT,
-                                                this->current_state->future_lane,
-                                                this->current_state->future_lane));
-                }
-                 else if (anticipLateralState == LateralState::STAY_IN_LANE) {
-                    if (anticipLongState == LongitudinalState::MAINTAIN_COURSE) {
-
-                        future_states.push_back(State(LongitudinalState::MAINTAIN_COURSE,
-                                                LateralState::STAY_IN_LANE,
-                                                this->current_state->current_lane,
-                                                this->current_state->current_lane));
-                    } 
-                    else if (anticipLongState == LongitudinalState::DECELERATE) {
-                        
-                        future_states.push_back(State(LongitudinalState::DECELERATE,
-                                                LateralState::STAY_IN_LANE,
-                                                this->current_state->current_lane,
-                                                this->current_state->current_lane));
+                case LateralState::PREPARE_CHANGE_LANE_LEFT:
+                    if (new_lateral_state == LateralState::STAY_IN_LANE) {
+                        current_lane = current_lane;
+                    } else if (new_lateral_state == LateralState::CHANGE_LANE_LEFT) {
+                        current_lane -= 1;
                     }
-                }
-                break;
-
-            case LateralState::PREPARE_CHANGE_LANE_RIGHT:
-                if (anticipLateralState == LateralState::CHANGE_LANE_RIGHT) {
-                    future_states.push_back(State(LongitudinalState::MAINTAIN_COURSE,
-                                                LateralState::CHANGE_LANE_RIGHT,
-                                                this->current_state->future_lane,
-                                                this->current_state->future_lane));
-                }
-                future_states.push_back(State(LongitudinalState::MAINTAIN_COURSE,
-                                            LateralState::STAY_IN_LANE,
-                                            this->current_state->current_lane,
-                                            this->current_state->current_lane));
-                future_states.push_back(State(LongitudinalState::DECELERATE,
-                                            LateralState::STAY_IN_LANE,
-                                            this->current_state->current_lane,
-                                            this->current_state->current_lane));
-                break;
-
-            default:       
-                future_states.push_back(State(LongitudinalState::MAINTAIN_COURSE,
-                                            LateralState::STAY_IN_LANE,
-                                            this->current_state->current_lane,
-                                            this->current_state->current_lane));       
+                    break;
+                case LateralState::PREPARE_CHANGE_LANE_RIGHT:
+                    if (new_lateral_state == LateralState::STAY_IN_LANE) {
+                        current_lane = current_lane;
+                    } else if (new_lateral_state == LateralState::CHANGE_LANE_RIGHT) {
+                        current_lane += 1;
+                    }
+                    break;
             }
-            return future_states;
+            return current_state;
+        }
+
+        State updateLongState(LateralState new_long_state) {
+            // ACCELERATE = 0,
+            // DECELERATE = 1,
+            // MAINTAIN_COURSE = 2,
+            // STOP = 3
+
+            current_state.long_state = new_long_state;
+            return current_state;
         }
 };
