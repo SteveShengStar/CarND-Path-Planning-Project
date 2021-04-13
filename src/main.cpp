@@ -13,6 +13,7 @@
 using nlohmann::json;
 using std::string;
 using std::vector;
+using std::abs;
 
 int main() {
   uWS::Hub h;
@@ -25,13 +26,11 @@ int main() {
   vector<double> map_waypoints_dy;
 
   const int startLane = 1;
-  const int nextLane = 1;
   const int SCAN_RANGE = 30;
   int count = 0;
   StateMachine sm(LongitudinalState::MAINTAIN_COURSE, 
                   LateralState::STAY_IN_LANE, 
-                  startLane,    // Start in lane 1, which is the center lane (0 is left and 2 is right)
-                  nextLane);   
+                  startLane);   
 
   // Start at zero velocity and gradually accelerate
   double ref_vel = 0.0; // mph
@@ -63,10 +62,10 @@ int main() {
     map_waypoints_dy.push_back(d_y);
   }
 
-  int lane = sm.current_state.current_lane;
+  int lane = sm.current_state->current_lane;
 
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
-               &map_waypoints_dx,&map_waypoints_dy,&ref_vel,&lane]
+               &map_waypoints_dx,&map_waypoints_dy,&ref_vel,&lane,&count,&sm]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -114,7 +113,7 @@ int main() {
           }
 
         
-          sm.current_state.lat_state = State::STAY_IN_LANE;   // Stay in the current lane by default
+          sm.current_state->lat_state = LateralState::STAY_IN_LANE;   // Stay in the current lane by default
           for (int i = 0; i < sensor_fusion.size(); i++) {
             float d = sensor_fusion[i][6]; 
             // Check if the car is in the same lane as the ego vehicle             
@@ -138,9 +137,10 @@ int main() {
                         sm.updateLateralState(LateralState::PREPARE_CHANGE_LANE_RIGHT);
                     }
                     count++;
+                    count %= 2;
                 } else if (lane == 2) {
                     // If I am on the right-most lane, I need to check whether the car on the left is too close to me
-                    sm.updateLateralState(State::PREPARE_CHANGE_LANE_LEFT);
+                    sm.updateLateralState(LateralState::PREPARE_CHANGE_LANE_LEFT);
                 }
                 break;
               } 
@@ -181,89 +181,96 @@ int main() {
             ptsy.push_back(ref_y);
           }
 
-          if (sm.current_state.lat_state == State::STAY_IN_LANE) {
+
+          if (sm.current_state->lat_state == LateralState::STAY_IN_LANE) {
+              // Accelerate by default
               sm.updateLongState(LongitudinalState::ACCELERATE);
+
+              for (int i = 0; i < sensor_fusion.size(); i++) {
+
+                  float  d  = sensor_fusion[i][6];
+                  double vx = sensor_fusion[i][3];
+                  double vy = sensor_fusion[i][4];
+                  double check_speed = sqrt(vx*vx + vy*vy);
+                  double check_car_s = sensor_fusion[i][5];
+
+                  check_car_s += (double)prev_size * 0.02 * check_speed;
+
+                  if (sm.current_state->lat_state == LateralState::STAY_IN_LANE) {
+                      // The detected vehicle is right in front and too close
+                      if ( d < (2+4*(lane-1)+2) && 
+                          d > (2+4*(lane-1)-2) && 
+                          check_car_s > car_s && 
+                          (check_car_s - car_s) < 30 )
+                      {
+                          sm.updateLongState(LongitudinalState::DECELERATE);
+                          break;
+                      } 
+                  }
+
+              }
           }
+          else if (sm.current_state->lat_state == LateralState::PREPARE_CHANGE_LANE_LEFT) {
 
-          if (sm.current_state.lat_state == State::PREPARE_CHANGE_LANE_LEFT) {
+              // By Default, just transition to the left lane 
+              sm.updateLateralState(LateralState::CHANGE_LANE_LEFT);
+              sm.updateLongState(LongitudinalState::MAINTAIN_COURSE);
 
-            // By Default, just transition to the left lane 
-            bool switchLanes = true;
+              for (int i = 0; i < sensor_fusion.size(); i++) {
 
-            for (int i = 0; i < sensor_fusion.size(); i++) {
+                float  d  = sensor_fusion[i][6];
+                double vx = sensor_fusion[i][3];
+                double vy = sensor_fusion[i][4];
+                double check_speed = sqrt(vx*vx + vy*vy);
+                double check_car_s = sensor_fusion[i][5];
+
+                check_car_s += (double)prev_size * 0.02 * check_speed;
+                
                 // A car on the left has been found. Detect whether it is too close
                 if (d < (2+4*(lane-1)+2) && d > (2+4*(lane-1)-2)) {
-                  float  d  = sensor_fusion[i][6];
-                  double vx = sensor_fusion[i][3];
-                  double vy = sensor_fusion[i][4];
-                  double check_speed = sqrt(vx*vx + vy*vy);
-                  double check_car_s = sensor_fusion[i][5];
-                
-                  check_car_s += (double)prev_size * 0.02 * check_speed;
 
                   // Check if the lane-switch is safe
                   if (abs(check_car_s - car_s) < SCAN_RANGE) {        // we detected that a car is too close
                     sm.updateLateralState(LateralState::STAY_IN_LANE);
-
                     // if (check_speed > ref_vel) {  // It is safe to proceed at the same speed
-                    //   sm.updateLateralState(LongitudinalState::MAINTAIN_COURSE);
-                    // } else {                      // Not safe to proceed at same speed
-                    //   sm.updateLateralState(LongitudinalState::DECELERATE);
-                    // }
-                    // break;
-
-                    switchLanes = false;
                     break;
                   } 
                 }
-            }
+              }
+          } else if (sm.current_state->lat_state == LateralState::PREPARE_CHANGE_LANE_RIGHT) {
 
-            if (switchLanes) {
-              sm.updateLateralState(LateralState::CHANGE_LANE_LEFT);
-            }
+              // By Default, just transition to the left lane 
+              sm.updateLateralState(LateralState::CHANGE_LANE_RIGHT);
+              sm.updateLongState(LongitudinalState::MAINTAIN_COURSE);
 
-          } else if (sm.current_state.lat_state == State::PREPARE_CHANGE_LANE_RIGHT) {
+              for (int i = 0; i < sensor_fusion.size(); i++) {
 
-            // By Default, just transition to the left lane 
-            bool switchLanes = true;
+                float  d  = sensor_fusion[i][6];
+                double vx = sensor_fusion[i][3];
+                double vy = sensor_fusion[i][4];
+                double check_speed = sqrt(vx*vx + vy*vy);
+                double check_car_s = sensor_fusion[i][5];
 
-            for (int i = 0; i < sensor_fusion.size(); i++) {
+                check_car_s += (double)prev_size * 0.02 * check_speed;
+
                 // A car on the left has been found. Detect whether it is too close
                 if (d < (2+4*(lane+1)+2) && d > (2+4*(lane+1)-2)) {
-                  float  d  = sensor_fusion[i][6];
-                  double vx = sensor_fusion[i][3];
-                  double vy = sensor_fusion[i][4];
-                  double check_speed = sqrt(vx*vx + vy*vy);
-                  double check_car_s = sensor_fusion[i][5];
-                
-                  check_car_s += (double)prev_size * 0.02 * check_speed;
 
                   // Check if the lane-switch is safe
                   if (abs(check_car_s - car_s) < SCAN_RANGE) {        // we detected that a car is too close
                     sm.updateLateralState(LateralState::STAY_IN_LANE);
-
                     // if (check_speed > ref_vel) {  // It is safe to proceed at the same speed
-                    //   sm.updateLateralState(LongitudinalState::MAINTAIN_COURSE);
-                    // } else {                      // Not safe to proceed at same speed
-                    //   sm.updateLateralState(LongitudinalState::DECELERATE);
-                    // }
-                    // break;
-
-                    switchLanes = false;
                     break;
                   } 
                 }
-            }
-
-            if (switchLanes) {
-              sm.updateLateralState(LateralState::CHANGE_LANE_RIGHT);
-            }
+              }
           }
+
         
           // Add evenly 30m spaced points ahead of the starting reference
-          vector<double> next_wp0 = getXY(car_s+30, 2+4*sm.current_state.current_lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          vector<double> next_wp1 = getXY(car_s+60, 2+4*sm.current_state.current_lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          vector<double> next_wp2 = getXY(car_s+90, 2+4*sm.current_state.current_lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          vector<double> next_wp0 = getXY(car_s+30, 2+4*sm.current_state->current_lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          vector<double> next_wp1 = getXY(car_s+60, 2+4*sm.current_state->current_lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          vector<double> next_wp2 = getXY(car_s+90, 2+4*sm.current_state->current_lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
           
           
           ptsx.push_back(next_wp0[0]);
@@ -303,9 +310,9 @@ int main() {
           // Fill up the rest of path planner after filling it with previous points, will always output 50 points
           for (int i = 1; i <= 50-previous_path_x.size(); i++) {
             // Reduce speed if too close, add if no longer close
-            if (too_close) {
+            if (sm.current_state->long_state == LongitudinalState::DECELERATE) {
               ref_vel -= .224;
-            } else if (ref_vel < 49.5) {
+            } else if (sm.current_state->long_state == LongitudinalState::ACCELERATE && ref_vel < 49.5) {
               ref_vel += .224;
             }
             double N = (target_dist/(0.02*ref_vel/2.24));
@@ -327,6 +334,11 @@ int main() {
             next_x_vals.push_back(x_point);
             next_y_vals.push_back(y_point);
           }
+
+
+          // Get back to original stay_in_lane latitudinal state
+          sm.updateLateralState(LateralState::STAY_IN_LANE);
+
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;

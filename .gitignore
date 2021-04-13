@@ -1,1 +1,10 @@
 build/*
+*.cmake
+*.log
+*.bin
+*.check_cache
+*.internal
+*.make
+*.txt
+Makefile
+src/CMakefiles/*
