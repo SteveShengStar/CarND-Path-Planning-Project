@@ -28,7 +28,7 @@ int main() {
   const int startLane = 1;
   const int SCAN_RANGE = 30;
   int count = 0;
-  StateMachine* sm = new StateMachine(LongitudinalState::MAINTAIN_COURSE, 
+  StateMachine* sm = new StateMachine(LongitudinalState::ACCELERATE, 
                                       LateralState::STAY_IN_LANE, 
                                       1);   
 
@@ -111,157 +111,167 @@ int main() {
           }
 
           
-          // if (sm->current_state->lat_state == LateralState::STAY_IN_LANE) {
+          if (sm->current_state->lat_state == LateralState::STAY_IN_LANE) {
 
-          //     for (int i = 0; i < sensor_fusion.size(); i++) {
-          //         float  d  = sensor_fusion[i][6];
-          //         double vx = sensor_fusion[i][3];
-          //         double vy = sensor_fusion[i][4];
-          //         double check_speed = sqrt(vx*vx + vy*vy);
-          //         double check_car_s = sensor_fusion[i][5];
+              for (int i = 0; i < sensor_fusion.size(); i++) {
+                  float  d  = sensor_fusion[i][6];
+                  double vx = sensor_fusion[i][3];
+                  double vy = sensor_fusion[i][4];
+                  double check_speed = sqrt(vx*vx + vy*vy);
+                  double check_car_s = sensor_fusion[i][5];
 
-          //         check_car_s += (double)prev_size * 0.02 * check_speed;
+                  check_car_s += (double)prev_size * 0.02 * check_speed;
 
-          //         // If the check_car is within 30 meters in front, consider changing lanes
-          //         if (check_car_s > car_s && (check_car_s - car_s) < 30) {
-          //           if (sm->current_state->current_lane == 0) {
-          //               // If I am on the left-most lane, I need to check whether the car on the right is too close to me
-          //               sm->updateLateralState(LateralState::PREPARE_CHANGE_LANE_RIGHT);
-          //           } else if (sm->current_state->current_lane == 1) {
-          //               if (count % 2 == 0) {
-          //                   sm->updateLateralState(LateralState::PREPARE_CHANGE_LANE_LEFT);
-          //               } else {
-          //                   sm->updateLateralState(LateralState::PREPARE_CHANGE_LANE_RIGHT);
-          //               }
-          //               count++;
-          //               count %= 2;
-          //           } else if (sm->current_state->current_lane == 2) {
-          //               // If I am on the right-most lane, I need to check whether the car on the left is too close to me
-          //               sm->updateLateralState(LateralState::PREPARE_CHANGE_LANE_LEFT);
-          //           }
+                  // If the check_car is within 30 meters in front, consider changing lanes
+                  int current_lane = sm->current_state->current_lane;
+                  if (d < (2+4*(current_lane)+2) && d > (2+4*(current_lane)-2)) {
+                  
+                      if (check_car_s > car_s && (check_car_s - car_s) < 30) {
+                        if (sm->current_state->current_lane == 0) {
+                            // If I am on the left-most lane, I need to check whether the car on the right is too close to me
+                            sm->updateLateralState(LateralState::PREPARE_CHANGE_LANE_RIGHT);
+                        } else if (sm->current_state->current_lane == 1) {
+                            if (count % 2 == 0) {
+                                sm->updateLateralState(LateralState::PREPARE_CHANGE_LANE_LEFT);
+                            } else {
+                                sm->updateLateralState(LateralState::PREPARE_CHANGE_LANE_RIGHT);
+                            }
+                            count++;
+                            count %= 2;
+                        } else if (sm->current_state->current_lane == 2) {
+                            // If I am on the right-most lane, I need to check whether the car on the left is too close to me
+                            sm->updateLateralState(LateralState::PREPARE_CHANGE_LANE_LEFT);
+                        }
 
-          //           sm->updateLongState(LongitudinalState::DECELERATE);
+                        sm->updateLongState(LongitudinalState::DECELERATE);
 
-          //           break;
-          //         } 
-          //     }
-          // }
-          // else if (sm->current_state->lat_state == LateralState::PREPARE_CHANGE_LANE_RIGHT) {
+                        break;
+                      } 
+                  }
+              }
 
-          //   bool changeLane = false; 
+              std::cout << sm->current_state->lat_state << std::endl;
+          }
+          else if (sm->current_state->lat_state == LateralState::PREPARE_CHANGE_LANE_RIGHT) {
 
-          //   for (int i = 0; i < sensor_fusion.size(); i++) {
+            bool changeLane = false; 
 
-          //     float  d  = sensor_fusion[i][6];
-          //     double vx = sensor_fusion[i][3];
-          //     double vy = sensor_fusion[i][4];
-          //     double check_speed = sqrt(vx*vx + vy*vy);
-          //     double check_car_s = sensor_fusion[i][5];
+            for (int i = 0; i < sensor_fusion.size(); i++) {
 
-          //     check_car_s += (double)prev_size * 0.02 * check_speed;
+              float  d  = sensor_fusion[i][6];
+              double vx = sensor_fusion[i][3];
+              double vy = sensor_fusion[i][4];
+              double check_speed = sqrt(vx*vx + vy*vy);
+              double check_car_s = sensor_fusion[i][5];
 
-          //     // Cars in the current lane
-          //     int current_lane = sm->current_state->current_lane;
-          //     if (d < (2+4*(current_lane)+2) && d > (2+4*(current_lane)-2)) {
+              check_car_s += (double)prev_size * 0.02 * check_speed;
 
-          //         // Check if the lane-switch is safe
-          //         if (abs(check_car_s - car_s) < 40) {        // a car in front of us is still too close
-          //             sm->updateLateralState(LateralState::PREPARE_CHANGE_LANE_RIGHT);
-          //             sm->updateLongState(LongitudinalState::DECELERATE);   // deccelerate to avoid collision
-          //             changeLane = true;
-          //             break;
-          //         }
-          //     }
-          //   }
+              // Cars in the current lane
+              int current_lane = sm->current_state->current_lane;
+              if (d < (2+4*(current_lane)+2) && d > (2+4*(current_lane)-2)) {
 
-          //   if (!changeLane) {
-          //       sm->updateLateralState(LateralState::STAY_IN_LANE);
-          //       sm->updateLongState(LongitudinalState::ACCELERATE);
-          //   } else {
+                  // Check if the lane-switch is safe
+                  if (abs(check_car_s - car_s) < 40) {        // a car in front of us is still too close
+                      sm->updateLateralState(LateralState::PREPARE_CHANGE_LANE_RIGHT);
+                      sm->updateLongState(LongitudinalState::DECELERATE);   // deccelerate to avoid collision
+                      changeLane = true;
+                      break;
+                  }
+              }
+            }
 
-          //       for (int i = 0; i < sensor_fusion.size(); i++) {
+            if (!changeLane) {
+                sm->updateLateralState(LateralState::STAY_IN_LANE);
+                sm->updateLongState(LongitudinalState::ACCELERATE);
+            } else {
 
-          //           float  d  = sensor_fusion[i][6];
-          //           double vx = sensor_fusion[i][3];
-          //           double vy = sensor_fusion[i][4];
-          //           double check_speed = sqrt(vx*vx + vy*vy);
-          //           double check_car_s = sensor_fusion[i][5];
+                for (int i = 0; i < sensor_fusion.size(); i++) {
 
-          //           check_car_s += (double)prev_size * 0.02 * check_speed;
+                    float  d  = sensor_fusion[i][6];
+                    double vx = sensor_fusion[i][3];
+                    double vy = sensor_fusion[i][4];
+                    double check_speed = sqrt(vx*vx + vy*vy);
+                    double check_car_s = sensor_fusion[i][5];
 
-          //           // Cars in the right lane
-          //           int right_lane = sm->current_state->current_lane+1;
-          //           if (d < (2+4*(right_lane)+2) && d > (2+4*(right_lane)-2)) {
+                    check_car_s += (double)prev_size * 0.02 * check_speed;
 
-          //               // Check if the lane-switch is safe
-          //               if (abs(check_car_s - car_s) < 30) {        // a car in front of us is still too close
-          //                   sm->updateLateralState(LateralState::CHANGE_LANE_RIGHT);
-          //                   sm->updateLongState(LongitudinalState::MAINTAIN_COURSE);
-          //                   break;
-          //               }
-          //           }
-          //       }
-          //   }
-          // } else if (sm->current_state->lat_state == LateralState::PREPARE_CHANGE_LANE_LEFT) {
+                    // Cars in the right lane
+                    int right_lane = sm->current_state->current_lane+1;
+                    if (d < (2+4*(right_lane)+2) && d > (2+4*(right_lane)-2)) {
 
-          //   bool changeLane = false; 
+                        // Check if the lane-switch is safe
+                        if (abs(check_car_s - car_s) < 30) {        // a car in front of us is still too close
+                            sm->updateLateralState(LateralState::CHANGE_LANE_RIGHT);
+                            sm->updateLongState(LongitudinalState::MAINTAIN_COURSE);
+                            break;
+                        }
+                    }
+                }
+            }
 
-          //   for (int i = 0; i < sensor_fusion.size(); i++) {
+            std::cout << sm->current_state->lat_state << std::endl;
+          } else if (sm->current_state->lat_state == LateralState::PREPARE_CHANGE_LANE_LEFT) {
 
-          //     float  d  = sensor_fusion[i][6];
-          //     double vx = sensor_fusion[i][3];
-          //     double vy = sensor_fusion[i][4];
-          //     double check_speed = sqrt(vx*vx + vy*vy);
-          //     double check_car_s = sensor_fusion[i][5];
+            bool changeLane = false; 
 
-          //     check_car_s += (double)prev_size * 0.02 * check_speed;
+            for (int i = 0; i < sensor_fusion.size(); i++) {
 
-          //     // Cars in the current lane
-          //     int current_lane = sm->current_state->current_lane;
-          //     if (d < (2+4*(current_lane)+2) && d > (2+4*(current_lane)-2)) {
+              float  d  = sensor_fusion[i][6];
+              double vx = sensor_fusion[i][3];
+              double vy = sensor_fusion[i][4];
+              double check_speed = sqrt(vx*vx + vy*vy);
+              double check_car_s = sensor_fusion[i][5];
 
-          //         // Check if the lane-switch is safe
-          //         if (abs(check_car_s - car_s) < 40) {        // a car in front of us is still too close
-          //             sm->updateLateralState(LateralState::PREPARE_CHANGE_LANE_LEFT);
-          //             sm->updateLongState(LongitudinalState::DECELERATE);   // deccelerate to avoid collision
-          //             changeLane = true;
-          //             break;
-          //         }
-          //     }
-          //   }
+              check_car_s += (double)prev_size * 0.02 * check_speed;
 
-          //   if (!changeLane) {
-          //       sm->updateLateralState(LateralState::STAY_IN_LANE);
-          //       sm->updateLongState(LongitudinalState::ACCELERATE);
-          //   } else {
+              // Cars in the current lane
+              int current_lane = sm->current_state->current_lane;
+              if (d < (2+4*(current_lane)+2) && d > (2+4*(current_lane)-2)) {
 
-          //       for (int i = 0; i < sensor_fusion.size(); i++) {
+                  // Check if the lane-switch is safe
+                  if (abs(check_car_s - car_s) < 40) {        // a car in front of us is still too close
+                      sm->updateLateralState(LateralState::PREPARE_CHANGE_LANE_LEFT);
+                      sm->updateLongState(LongitudinalState::DECELERATE);   // deccelerate to avoid collision
+                      changeLane = true;
+                      break;
+                  }
+              }
+            }
 
-          //           float  d  = sensor_fusion[i][6];
-          //           double vx = sensor_fusion[i][3];
-          //           double vy = sensor_fusion[i][4];
-          //           double check_speed = sqrt(vx*vx + vy*vy);
-          //           double check_car_s = sensor_fusion[i][5];
+            if (!changeLane) {
+                sm->updateLateralState(LateralState::STAY_IN_LANE);
+                sm->updateLongState(LongitudinalState::ACCELERATE);
+            } else {
 
-          //           check_car_s += (double)prev_size * 0.02 * check_speed;
+                for (int i = 0; i < sensor_fusion.size(); i++) {
 
-          //           // Cars in the right lane
-          //           int left_lane = sm->current_state->current_lane-1;
-          //           if (d < (2+4*(left_lane)+2) && d > (2+4*(left_lane)-2)) {
+                    float  d  = sensor_fusion[i][6];
+                    double vx = sensor_fusion[i][3];
+                    double vy = sensor_fusion[i][4];
+                    double check_speed = sqrt(vx*vx + vy*vy);
+                    double check_car_s = sensor_fusion[i][5];
 
-          //               // Check if the lane-switch is safe
-          //               if (abs(check_car_s - car_s) < 30) {        // a car in front of us is still too close
-          //                   sm->updateLateralState(LateralState::CHANGE_LANE_LEFT);
-          //                   sm->updateLongState(LongitudinalState::MAINTAIN_COURSE);
-          //                   break;
-          //               }
-          //           }
-          //       }
-          //   }
-          // } else if (sm->current_state->lat_state == LateralState::CHANGE_LANE_LEFT || sm->current_state->lat_state == LateralState::CHANGE_LANE_RIGHT) {
-          //     sm->updateLateralState(LateralState::STAY_IN_LANE);
-          //     sm->updateLongState(LongitudinalState::MAINTAIN_COURSE);
-          // }
+                    check_car_s += (double)prev_size * 0.02 * check_speed;
+
+                    // Cars in the right lane
+                    int left_lane = sm->current_state->current_lane-1;
+                    if (d < (2+4*(left_lane)+2) && d > (2+4*(left_lane)-2)) {
+
+                        // Check if the lane-switch is safe
+                        if (abs(check_car_s - car_s) < 30) {        // a car in front of us is still too close
+                            sm->updateLateralState(LateralState::CHANGE_LANE_LEFT);
+                            sm->updateLongState(LongitudinalState::MAINTAIN_COURSE);
+                            break;
+                        }
+                    }
+                }
+
+                std::cout << sm->current_state->lat_state << std::endl;
+            }
+          } else if (sm->current_state->lat_state == LateralState::CHANGE_LANE_LEFT || sm->current_state->lat_state == LateralState::CHANGE_LANE_RIGHT) {
+              sm->updateLateralState(LateralState::STAY_IN_LANE);
+              sm->updateLongState(LongitudinalState::MAINTAIN_COURSE);
+          }
           
         
           // Create a list of evenly spaced waypoints 30m apart
@@ -298,14 +308,15 @@ int main() {
             ptsy.push_back(ref_y);
           }
           
-          
-          int lane = sm->current_state->current_lane;
-          
-          std::cout << lane << std::endl;
-
-          vector<double> next_wp0 = getXY(car_s+30, 2+4*lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          vector<double> next_wp1 = getXY(car_s+60, 2+4*lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          vector<double> next_wp2 = getXY(car_s+90, 2+4*lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          std::cout << "Current Lane" << std::endl;
+          std::cout << sm->current_state->current_lane << std::endl;
+          std::cout << "Long State" << std::endl;
+          std::cout << sm->current_state->long_state << std::endl;
+          // sm->current_state->long_state = LongitudinalState::ACCELERATE;		
+          // sm->current_state->current_lane = 1;		
+          vector<double> next_wp0 = getXY(car_s+30, 2+4*(sm->current_state->current_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);		
+          vector<double> next_wp1 = getXY(car_s+60, 2+4*(sm->current_state->current_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);		
+          vector<double> next_wp2 = getXY(car_s+90, 2+4*(sm->current_state->current_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
           
           
           ptsx.push_back(next_wp0[0]);
