@@ -113,6 +113,8 @@ int main() {
           
           if (sm->current_state->lat_state == LateralState::STAY_IN_LANE) {
 
+              sm->updateLongState(LongitudinalState::ACCELERATE);
+
               for (int i = 0; i < sensor_fusion.size(); i++) {
                   float  d  = sensor_fusion[i][6];
                   double vx = sensor_fusion[i][3];
@@ -171,7 +173,7 @@ int main() {
               if (d < (2+4*(current_lane)+2) && d > (2+4*(current_lane)-2)) {
 
                   // Check if the lane-switch is safe
-                  if (abs(check_car_s - car_s) < 40) {        // a car in front of us is still too close
+                  if (abs(check_car_s - car_s) < 34) {        // a car in front of us is still too close
                       sm->updateLateralState(LateralState::PREPARE_CHANGE_LANE_RIGHT);
                       sm->updateLongState(LongitudinalState::DECELERATE);   // deccelerate to avoid collision
                       changeLane = true;
@@ -229,7 +231,7 @@ int main() {
               if (d < (2+4*(current_lane)+2) && d > (2+4*(current_lane)-2)) {
 
                   // Check if the lane-switch is safe
-                  if (abs(check_car_s - car_s) < 40) {        // a car in front of us is still too close
+                  if (abs(check_car_s - car_s) < 34) {        // a car in front of us is still too close
                       sm->updateLateralState(LateralState::PREPARE_CHANGE_LANE_LEFT);
                       sm->updateLongState(LongitudinalState::DECELERATE);   // deccelerate to avoid collision
                       changeLane = true;
@@ -312,8 +314,7 @@ int main() {
           std::cout << sm->current_state->current_lane << std::endl;
           std::cout << "Long State" << std::endl;
           std::cout << sm->current_state->long_state << std::endl;
-          // sm->current_state->long_state = LongitudinalState::ACCELERATE;		
-          // sm->current_state->current_lane = 1;		
+          	
           vector<double> next_wp0 = getXY(car_s+30, 2+4*(sm->current_state->current_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);		
           vector<double> next_wp1 = getXY(car_s+60, 2+4*(sm->current_state->current_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);		
           vector<double> next_wp2 = getXY(car_s+90, 2+4*(sm->current_state->current_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
