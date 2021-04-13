@@ -28,9 +28,9 @@ class State {
 };
 
 State::State(LongitudinalState long_state, LateralState lat_state, int current_lane) {
-    long_state = long_state;
-    lat_state = lat_state;
-    current_lane = current_lane;
+    this->long_state = long_state;
+    this->lat_state = lat_state;
+    this->current_lane = current_lane;
 }
 
 
@@ -44,6 +44,8 @@ class StateMachine {
 
         StateMachine(LongitudinalState long_state, LateralState lat_state, int current_lane) {
             current_state = new State(long_state, lat_state, current_lane);
+            // std::cout << "Here" << std::endl;
+            // std::cout << current_state->current_lane << std::endl;
         }
 
         State updateLateralState(LateralState new_lateral_state) {
